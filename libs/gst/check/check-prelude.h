@@ -25,7 +25,11 @@
 #include <gst/gst.h>
 
 #ifndef GST_CHECK_API
-#define GST_CHECK_API GST_EXPORT
+#ifdef BUILDING_GST_CHECK
+#define GST_CHECK_API GST_API_EXPORT        /* from config.h */
+#else
+#define GST_CHECK_API GST_API_IMPORT
+#endif
 #endif
 
 #ifndef GST_DISABLE_DEPRECATED

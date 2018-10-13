@@ -33,6 +33,8 @@ helpers_install_dir = join_paths(libexecdir, 'gstreamer-1.0')
 
 cc = meson.get_compiler('c')
 
+cdata = configuration_data()
+
 # Ignore several spurious warnings for things gstreamer does very commonly
 # If a warning is completely useless and spammy, use '/wdXXXX' to suppress it
 # If a warning is harmless but hard to fix, use '/woXXXX' so it's shown once
@@ -43,6 +45,7 @@ if cc.get_id() == 'msvc'
       '/wd4146', # unary minus on unsigned (beware INT_MIN)
       '/wd4244', # lossy type conversion (e.g. double -> int)
       '/wd4305', # truncating type conversion (e.g. double -> float)
+      cc.get_supported_arguments(['/utf-8']), # set the input encoding to utf-8
       language : 'c')
 elif cc.has_link_argument('-Wl,-Bsymbolic-functions')
   # FIXME: Add an option for this if people ask for it
@@ -50,10 +53,19 @@ elif cc.has_link_argument('-Wl,-Bsymbolic-functions')
 endif
 
 # Symbol visibility
-have_visibility_hidden = cc.has_argument('-fvisibility=hidden')
-if have_visibility_hidden
+have_visibility_hidden = false
+if cc.get_id() == 'msvc'
+  export_define = '__declspec(dllexport) extern'
+elif cc.has_argument('-fvisibility=hidden')
   add_project_arguments('-fvisibility=hidden', language: 'c')
+  export_define = 'extern __attribute__ ((visibility ("default")))'
+  have_visibility_hidden = true
+else
+  export_define = 'extern'
 endif
+
+# Passing this through the command line would be too messy
+cdata.set('GST_API_EXPORT', export_define)
 
 # Disable strict aliasing
 if cc.has_argument('-fno-strict-aliasing')
@@ -78,7 +90,12 @@ if glib_asserts.disabled() or (glib_asserts.auto() and not gst_version_is_dev)
   add_project_arguments('-DG_DISABLE_ASSERT', language: 'c')
 endif
 
-cdata = configuration_data()
+glib_checks = get_option('glib-checks')
+if glib_checks.disabled() or (glib_checks.auto() and not gst_version_is_dev)
+  message('Disabling GLib checks')
+  add_project_arguments('-DG_DISABLE_CHECKS', language: 'c')
+endif
+
 cdata.set_quoted('GST_API_VERSION', apiversion)
 cdata.set_quoted('GST_DATADIR', join_paths(prefix, get_option('datadir')))
 cdata.set_quoted('LOCALEDIR', join_paths(prefix, get_option('localedir')))
@@ -453,7 +470,7 @@ if get_option('default_library') == 'static'
 endif
 
 # Used in gst/parse/meson.build and below
-python3 = import('python3').find_python()
+python3 = import('python').find_installation()
 
 bashcomp_option = get_option('bash-completion')
 bashcomp_dep = dependency('bash-completion', version : '>= 2.0', required : bashcomp_option)
